@@ -50,14 +50,14 @@ class Model:
     def load_test_data(self, test_folder: str):
         self.test_set = datasets.ImageFolder(root=test_folder, transform=self.transform)
 
-    def load_train_data_set(self, data_set: str):
+    def load_train_data_set(self, data_set):
         self.data_set = data_set
 
-    def load_test_data_set(self, test_set: str):
+    def load_test_data_set(self, test_set):
         self.test_set = test_set
 
     def train(self, epochs: int, learning_rate: float, batch_sizes: int):
-        dataloader = data.DataLoader(self.data_set, batch_size=batch_sizes, shuffle=False)
+        dataloader = data.DataLoader(self.data_set, batch_size=batch_sizes, shuffle=True)
         optimizer = optim.Adam(params=self.model.parameters())
         criterion = nn.CrossEntropyLoss()
 
@@ -65,7 +65,7 @@ class Model:
 
         for epoch in range(epochs):
             loss = None
-            for image, label in dataloader:
+            for index, (image, label) in enumerate(dataloader):
                 result = self.model(image)
                 loss = criterion(result, label)
                 optimizer.zero_grad()
@@ -73,10 +73,33 @@ class Model:
                 optimizer.step()
             time_current = time.time()
             cost = showtime(time_start, time_current)
-            print("Epoch:{}/{} , Time:{} , Loss: {}".format(epoch, epochs, cost, loss))
+            print("Epoch:{}/{} , Time:{} , Loss: {}".format(epoch + 1, epochs, cost, loss))
 
     def save_params(self, path: str):
         torch.save(self.model.state_dict(), path)
+
+    def predict(self, x):
+        return self.model(x)
+
+    def score(self):
+        test_loader = data.DataLoader(dataset=self.test_set,
+                                      batch_size=1,
+                                      shuffle=False,
+                                      )
+
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for image, label in test_loader:
+                outputs = self.model(image)
+                _, predicted = torch.max(outputs.data, 1)
+                total += 1
+                correct += (predicted == label).sum().item()
+
+        accuracy = 100 * correct / total
+
+        print("accuracy: {}".format(accuracy))
 
 
 
