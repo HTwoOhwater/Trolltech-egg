@@ -6,33 +6,120 @@ import torch
 import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+import torch.utils.data as data
 from pylab import mpl
 import cv2  # 这里要用滚动更新版，不然不能显示中文（旧版不支持UTF-8）
 import os
-import urllib
-import re
-from bs4 import BeautifulSoup
 import time
+
 
 mpl.rcParams["font.sans-serif"] = ["SimHei"]
 
 
+def showtime(start, end):
+    time_cal = end - start
+    result = ""
+    second = int(time_cal % 60)
+    time_cal = time_cal // 60
+    minute = int(time_cal % 60)
+    hour = int(time_cal // 60)
+    if hour > 0:
+        result = result + str(hour) + "h"
+    if minute > 0:
+        result = result + str(minute) + "min"
+    if second > 0:
+        result = result + str(second) + "s"
+    return result
+
+
+class Model:
+    def __init__(self, model: nn.Module, params_path: str, ):
+        self.model = model
+        if params_path:
+            self.model.load_state_dict(torch.load(f=params_path))
+        self.data_set = None
+        self.transform = None
+        self.test_set = None
+
+    def load_trans(self, __trans: transforms.transforms):
+        self.transform = __trans
+
+    def load_train_data(self, data_folder: str):
+        self.data_set = datasets.ImageFolder(root=data_folder, transform=self.transform)
+
+    def load_test_data(self, test_folder: str):
+        self.test_set = datasets.ImageFolder(root=test_folder, transform=self.transform)
+
+    def load_train_data_set(self, data_set):
+        self.data_set = data_set
+
+    def load_test_data_set(self, test_set):
+        self.test_set = test_set
+
+    def train(self, epochs: int, learning_rate: float, batch_sizes: int):
+        dataloader = data.DataLoader(self.data_set, batch_size=batch_sizes, shuffle=True)
+        optimizer = optim.Adam(params=self.model.parameters())
+        criterion = nn.CrossEntropyLoss()
+
+        time_start = time.time()
+
+        for epoch in range(epochs):
+            loss = None
+            for index, (image, label) in enumerate(dataloader):
+                result = self.model(image)
+                loss = criterion(result, label)
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+            time_current = time.time()
+            cost = showtime(time_start, time_current)
+            print("Epoch:{}/{} , Time:{} , Loss: {}".format(epoch + 1, epochs, cost, loss))
+
+    def save_params(self, path: str):
+        torch.save(self.model.state_dict(), path)
+
+    def predict(self, x):
+        return self.model(x)
+
+    def score(self):
+        test_loader = data.DataLoader(dataset=self.test_set,
+                                      batch_size=1,
+                                      shuffle=False,
+                                      )
+
+        correct = 0
+        total = 0
+
+        with torch.no_grad():
+            for image, label in test_loader:
+                outputs = self.model(image)
+                _, predicted = torch.max(outputs.data, 1)
+                total += 1
+                correct += (predicted == label).sum().item()
+
+        accuracy = 100 * correct / total
+
+        print("accuracy: {}".format(accuracy))
+
+
+
+
 class MakeTrainer:
     def __init__(self, epochs: int, learning_rate: float, batch_size=64, model_name="", save_frequency=0, train_path=".core/train_libraries/", save_path=".core/model_versions/"):
-        self.save_frequency = save_frequency  # 保存频率
-        self.epochs = epochs  # 训练次数（一般5到10就行）
-        self.learning_rate = learning_rate  # 学习率（一般1e-4就能应付大部分情况了）
-        self.batch_size = batch_size  # 分批次训练，以节省内存，提升效率，默认就好，一般不需要改
-        self.num_classes = 0  # 分类数（程序会自己处理）
-        self.train_path = train_path  # 训练集位置（文件夹）
-        self.path = save_path  # 保存模型位置（文件夹）
-        self.model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)  # 加载预训练模型
         # 定义转换器
         self.transform = transforms.Compose([
             transforms.Resize((224, 224)),  # 转化成224x224的图片，使其能输入模型
             transforms.ToTensor(),  # numpy数组张量化
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),  # 对图片归一，加快训练效率
         ])
+        self.save_frequency = save_frequency  # 保存频率
+        self.epochs = epochs  # 训练次数
+        self.learning_rate = learning_rate  # 学习率
+        self.batch_size = batch_size  # 分批次训练，以节省内存，提升效率
+        self.num_classes = 0  # 分类数（程序会自己处理）
+        self.train_path = train_path  # 训练集位置（文件夹）
+        self.path = save_path  # 保存模型位置（文件夹）
+        self.model = models.resnet50(weights=models.ResNet50_Weights.DEFAULT)  # 加载预训练模型
         # 定义训练加载器
         self.train_dataset = datasets.ImageFolder(root=self.train_path, transform=self.transform)
         self.train_loader = torch.utils.data.DataLoader(dataset=self.train_dataset, batch_size=batch_size, shuffle=True)
@@ -45,20 +132,6 @@ class MakeTrainer:
 
     def start(self):
         # 用来计算时间的函数
-        def showtime(start, end):
-            time_cal = end - start
-            result = ""
-            second = int(time_cal % 60)
-            time_cal = time_cal // 60
-            minute = int(time_cal % 60)
-            hour = int(time_cal // 60)
-            if hour > 0:
-                result = result + str(hour) + "h"
-            if minute > 0:
-                result = result + str(minute) + "min"
-            if second > 0:
-                result = result + str(second) + "s"
-            return result
 
         start_time = time.time()  # 开始计时
 
@@ -286,103 +359,16 @@ class MakePredictor:
     # 可惜我没时间了
 
 
-class MakeCrawler:
-    def __init__(self):
-        self.header = {
-            'User-Agent':
-                'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 '
-                'UBrowser/6.1.2107.204 Safari/537.36'
-        }
-        self.url = "https://cn.bing.com/images/async?q={0}&first={1}&count={" \
-              "2}&scenario=ImageBasicHover&datsrc=N_I&layout=ColumnBased&mmasync=1&dgState=c*9_y" \
-              "*2226s2180s2072s2043s2292s2295s2079s2203s2094_i*71_w*198&IG=0D6AD6CBAF43430EA716510A4754C951&SFX={" \
-              "3}&iid=images.5599"
-
-    def start(self, key_word: str, crawl_number=100, save_path=".core/image_assets/", crawled_number=0, fast_train=False):
-        def get_image(url, count, path):
-            try:
-                time.sleep(0.5)
-                urllib.request.urlretrieve(url, path + str(count + 1) + '.jpg')
-            except Exception as e:
-                time.sleep(1)
-                print("图像因为未知原因无法保存，正在跳过...")
-                return count
-            else:
-                print("图片+1，已保存 " + str(count + 1) + " 张图")
-                return count + 1
-
-        # ----------------------------------------------------------------------------------------------------------------------
-
-        # ----------------------------------------------------------------------------------------------------------------------
-        # 找到原图并返回URL
-        def findImgUrlFromHtml(html, rule, url, key, first, loadNum, sfx, count, path, crawl_number):
-            soup = BeautifulSoup(html, "lxml")
-            link_list = soup.find_all("a", class_="iusc")
-            url = []
-            for link in link_list:
-                result = re.search(rule, str(link))
-                # 将字符串"amp;"删除
-                url = result.group(0)
-                # 组装完整url
-                url = url[8:len(url)]
-                # 打开高清图片网址
-                count = get_image(url, count, path)
-                if count >= crawl_number:
-                    break
-            # 完成一页，继续加载下一页
-            return count
-
-        # ----------------------------------------------------------------------------------------------------------------------
-
-        # ----------------------------------------------------------------------------------------------------------------------
-        # 获取缩略图列表页
-        def getStartHtml(url, key, first, loadNum, sfx):
-            # 打开页面
-            page = urllib.request.Request(url.format(key, first, loadNum, sfx), headers=self.header)
-            html = urllib.request.urlopen(page)
-            return html
-
-        if fast_train:
-            save_path = ".core/train_libraries/"
-        save_path += key_word + "/"
-        # 将关键词转化成URL编码
-        key = urllib.parse.quote(key_word)
-        # URL中的页码（这里的页码有些抽象，指的是从第几个图片开始）
-        first = 1
-        # URL中每页的图片数
-        loadNum = 35
-        # URL中迭代的图片位置（即每页第几个图片）
-        sfx = 1
-        # 用正则表达式去匹配图片的URL
-        rule = re.compile(r"\"murl\":\"http\S[^\"]+")
-        # 没有目录就创建目录
-        if not os.path.exists(save_path):
-            os.makedirs(save_path)
-        # 开始爬取
-        print("初始化成功！正在爬取。")
-        while crawled_number < crawl_number:
-            # 获取当前页的html内容
-            html = getStartHtml(self.url, key, first, loadNum, sfx)
-            # 获取图片的URL并保存图片
-            crawled_number = findImgUrlFromHtml(html, rule, self.url, key, first, loadNum, sfx, crawled_number, save_path,
-                                                crawl_number)
-            # 防止爬取之前的图片
-            first = crawled_number + 1
-
-            sfx += 1
-        print("爬取成功！已经完成关键词为{0:}的图片爬取{1:}张".format(key_word, crawl_number))
-
-
 # 初始化的时候构建新目录
-if not os.path.exists(".core/image_assets"):
-    os.makedirs(".core/image_assets")
-# 这个目录用来放爬虫的爬取的内容
-if not os.path.exists(".core/train_libraries"):
-    os.makedirs(".core/train_libraries")
+# 这个目录用来放测试集
+if not os.path.exists(".core/data/test"):
+    os.makedirs(".core/data/test")
 # 这个目录用来放训练素材
-if not os.path.exists(".core/model_versions"):
-    os.makedirs(".core/model_versions")
+if not os.path.exists(".core/data/train"):
+    os.makedirs(".core/data/train")
 # 这个目录用来放训练好的模型
-if not os.path.exists(".core/test_sets"):
-    os.makedirs(".core/test_sets")
-# 这个目录用来放测试用的图片（如果你喜欢放在里面的话）
+if not os.path.exists(".core/model"):
+    os.makedirs(".core/model")
+
+
+
