@@ -1,14 +1,10 @@
 import torch.nn as nn
 import torch.optim as optim
-import datetime
-import torchvision.models as models
 import torch
-import matplotlib.pyplot as plt
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
 import torch.utils.data as data
 from pylab import mpl
-import cv2  # 这里要用滚动更新版，不然不能显示中文（旧版不支持UTF-8）
 import os
 import time
 
@@ -33,7 +29,7 @@ def showtime(start, end):
 
 
 class Model:
-    def __init__(self, model: nn.Module, params_path: str, ):
+    def __init__(self, model: nn.Module, params_path=""):
         self.model = model
         if params_path:
             self.model.load_state_dict(torch.load(f=params_path))
@@ -58,7 +54,7 @@ class Model:
 
     def train(self, epochs: int, learning_rate: float, batch_sizes: int):
         dataloader = data.DataLoader(self.data_set, batch_size=batch_sizes, shuffle=True)
-        optimizer = optim.Adam(params=self.model.parameters())
+        optimizer = optim.Adam(params=self.model.parameters(), lr=learning_rate)
         criterion = nn.CrossEntropyLoss()
 
         time_start = time.time()
@@ -77,6 +73,12 @@ class Model:
 
     def save_params(self, path: str):
         torch.save(self.model.state_dict(), path)
+
+    def save_labels(self, path: str):
+        file = open(path, mode="w+", encoding="UTF-8")
+        keys = ",".join(self.data_set.classes)
+        file.write(keys)
+        file.close()
 
     def predict(self, x):
         return self.model(x)
@@ -101,10 +103,17 @@ class Model:
 
         print("accuracy: {}".format(accuracy))
 
+    def predict(self, image):
+        result = self.model(self.transform(image))
+        nn.Softmax(result)
+        value, index = torch.max(result, dim=-1)
+        return index
+
+    def result(self, value, index):
+        pass
 
 
-
-class MakeTrainer:
+"""class MakeTrainer:
     def __init__(self, epochs: int, learning_rate: float, batch_size=64, model_name="", save_frequency=0, train_path=".core/train_libraries/", save_path=".core/model_versions/"):
         # 定义转换器
         self.transform = transforms.Compose([
@@ -357,7 +366,7 @@ class MakePredictor:
     def test_model(self):
         pass
     # 可惜我没时间了
-
+"""
 
 # 初始化的时候构建新目录
 # 这个目录用来放测试集

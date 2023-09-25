@@ -5,16 +5,32 @@ import torch.nn as nn
 class Simple(nn.Module):
     def __init__(self):
         super(Simple, self).__init__()
-        self.fc1 = torch.nn.Linear(in_features=784, out_features=10, bias=True)
+        self.fc1 = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=8, stride=2, padding=1, kernel_size=7),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2, 2), stride=2),
+            nn.Conv2d(in_channels=8, out_channels=16, stride=2, padding=1, kernel_size=3),
+            nn.ReLU(),
+            nn.MaxPool2d(kernel_size=(2, 2), stride=1),
+            nn.AdaptiveAvgPool2d((2, 2))
+        )
+        self.fc2 = nn.Sequential(
+            nn.Linear(in_features=2 * 2 * 16, out_features=16),
+            nn.ReLU(),
+            nn.Linear(in_features=16, out_features=10)
+        )
 
     def forward(self, x):
-        return self.fc1(x)
+        x = self.fc1(x)
+        x = torch.flatten(x, 1)
+        x = self.fc2(x)
+        return x
 
 
 class AlexNet(nn.Module):
     def __init__(self, config):
         super(AlexNet, self).__init__()
-        self._config = config
+        self.config = config
         # 定义卷积层和池化层
         self.features = nn.Sequential(
             nn.Conv2d(1, 64, kernel_size=11, stride=4, padding=2),
@@ -41,7 +57,7 @@ class AlexNet(nn.Module):
             nn.Dropout(),
             nn.Linear(4096, 1024),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, self._config['num_classes']),
+            nn.Linear(1024, self.config),
         )
 
     def forward(self, x):
