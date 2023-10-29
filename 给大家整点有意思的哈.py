@@ -40,3 +40,4 @@ for i in range(10000):
     if not (i + 1) % 100:
         print(w, b, l)
 
+print(w, b)
