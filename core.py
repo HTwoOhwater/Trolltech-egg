@@ -109,6 +109,8 @@ class Model:
         value, index = torch.max(result, dim=-1)
         return index
 
+    
+
     def result(self, value, index):
         pass
 
@@ -378,6 +380,3 @@ if not os.path.exists(".core/data/train"):
 # 这个目录用来放训练好的模型
 if not os.path.exists(".core/model"):
     os.makedirs(".core/model")
-
-
-
